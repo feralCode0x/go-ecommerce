@@ -1,0 +1,18 @@
+package dto
+
+import (
+	"go-ecommerce/pkgs/paging"
+)
+
+type ListProductRequest struct {
+	Search    string `json:"search,omitempty" form:"search"`
+	Page      int64  `json:"-" form:"page"`
+	Limit     int64  `json:"-" form:"size"`
+	OrderBy   string `json:"-" form:"order_by"`
+	OrderDesc bool   `json:"-" form:"order_desc"`
+	TakeAll   bool   `json:"-" form:"take_all"`
+}
+type ListProductResponse struct {
+	Products   []*Product         `json:"items"`
+	Pagination *paging.Pagination `json:"metadata"`
+}

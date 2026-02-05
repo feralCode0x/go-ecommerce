@@ -1,0 +1,106 @@
+package usecase
+
+import (
+	"context"
+	"go-ecommerce/utils"
+	"go-ecommerce/pkgs/logger"
+	"go-ecommerce/pkgs/validation"
+	"go-ecommerce/internals/cart/controller/dto"
+	"go-ecommerce/internals/cart/entity"
+	"go-ecommerce/internals/cart/repository"
+	productRepo "go-ecommerce/internals/product/repository"
+)
+
+type ICartUseCase interface {
+	GetCartByUserID(ctx context.Context, userID string) (*entity.Cart, error)
+	AddProduct(ctx context.Context, req *dto.AddProductRequest) error
+	UpdateCartLine(ctx context.Context, req *dto.UpdateCartLineRequest) error
+	RemoveProduct(ctx context.Context, req *dto.RemoveProductRequest) error
+}
+
+type CartUseCase struct {
+	validator   validation.Validation
+	cartRepo    repository.ICartRepository
+	productRepo productRepo.IProductRepository
+}
+
+func NewCartUseCase(
+	validator validation.Validation,
+	cartRepo repository.ICartRepository,
+	productRepo productRepo.IProductRepository,
+) *CartUseCase {
+	return &CartUseCase{
+		validator:   validator,
+		cartRepo:    cartRepo,
+		productRepo: productRepo,
+	}
+}
+
+func (cu *CartUseCase) GetCartByUserID(ctx context.Context, userID string) (*entity.Cart, error) {
+	cart, err := cu.cartRepo.GetCartByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return cart, nil
+}
+
+func (cu *CartUseCase) AddProduct(ctx context.Context, req *dto.AddProductRequest) error {
+	if err := cu.validator.ValidateStruct(req); err != nil {
+		return err
+	}
+
+	product, err := cu.productRepo.GetProductById(ctx, req.ProductID)
+	if err != nil {
+		return err
+	}
+
+	var cartLine entity.CartLine
+	utils.MapStruct(&cartLine, &req)
+	cartLine.Price = float64(cartLine.Quantity) * product.Price
+
+	err = cu.cartRepo.CreateCartLine(ctx, &cartLine)
+	if err != nil {
+		logger.Errorf("Create fail, error: %s", err)
+		return err
+	}
+	return nil
+}
+
+func (cu *CartUseCase) UpdateCartLine(ctx context.Context, req *dto.UpdateCartLineRequest) error {
+	if err := cu.validator.ValidateStruct(req); err != nil {
+		return err
+	}
+
+	product, err := cu.productRepo.GetProductById(ctx, req.ProductID)
+	if err != nil {
+		return err
+	}
+
+	cartLine, err := cu.cartRepo.GetCartLineByProductIDAndCartID(ctx, req.CartID, req.ProductID)
+	if err != nil {
+		return err
+	}
+	cartLine.Price = product.Price * float64(req.Quantity)
+	utils.MapStruct(cartLine, req)
+
+	err = cu.cartRepo.UpdateCartLine(ctx, cartLine)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cu *CartUseCase) RemoveProduct(ctx context.Context, req *dto.RemoveProductRequest) error {
+	cartLine, err := cu.cartRepo.GetCartLineByProductIDAndCartID(ctx, req.CartID, req.ProductID)
+	if err != nil {
+		return err
+	}
+
+	if err := cu.cartRepo.RemoveCartLine(ctx, cartLine); err != nil {
+		return err
+	}
+
+	return nil
+}
